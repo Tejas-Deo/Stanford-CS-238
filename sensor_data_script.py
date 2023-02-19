@@ -53,10 +53,10 @@ MIN_REPLAY_MEMORY_SIZE = 1_000
 MINIBATCH_SIZE = 16
 PREDICTION_BATCH_SIZE = 1
 TRAINING_BATCH_SIZE = MINIBATCH_SIZE // 4
-UPDATE_TARGET_EVERY = 5
+UPDATE_TARGET_EVERY = 5   # number of episodes after which we want to update the model
 MODEL_NAME = "Xception"
 
-MEMORY_FRACTION = 0.8
+MEMORY_FRACTION = 0.8   # how much of gpu memory you want to use
 MIN_REWARD = -200
 
 EPISODES = 100
@@ -239,6 +239,7 @@ class DQNAgent:
         self.target_model = self.create_model()
         self.target_model.set_weights(self.model.get_weights())
 
+        # history of random actions
         self.replay_memory = deque(maxlen=REPLAY_MEMORY_SIZE)
 
         self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/{MODEL_NAME}-{int(time.time())}")
@@ -246,15 +247,17 @@ class DQNAgent:
         self.graph = tf.get_default_graph()
 
         self.terminate = False
-        self.last_logged_episode = 0
+        self.last_logged_episode = 0 # to keep a track for tensorboard
         self.training_initialized = False
 
     def create_model(self):
+        # not using predefined weights; None = randomly initializing weights
         base_model = Xception(weights=None,include_top=False,input_shape=(IM_HEIGHT, IM_WIDTH,3))
         
         x = base_model.output
         x = GlobalAveragePooling2D()(x)
 
+        # output has 3 actions; turn left, right and go straight
         predictions = Dense(3, activation="linear")(x)
         model = Model(inputs=base_model.input, outputs=predictions)
         model.compile(loss="mse", optimizer=Adam(lr=0.001), metrics=["accuracy"])
@@ -268,9 +271,12 @@ class DQNAgent:
         if len(self.replay_memory) < MIN_REPLAY_MEMORY_SIZE:
             return
 
+        # to get the minibatch after we have sufficient memory
         minibatch = random.sample(self.replay_memory, MINIBATCH_SIZE)
 
+        # to get the current state of our model, i.e. the image from the mini batch
         current_states = np.array([transition[0] for transition in minibatch])/255
+
         with self.graph.as_default():
             current_qs_list = self.model.predict(current_states, PREDICTION_BATCH_SIZE)
 
@@ -281,6 +287,11 @@ class DQNAgent:
         X = []
         y = []
 
+        '''
+        to start the training by looping over all the mini batches
+
+        We want to predict the Q value for non-terminal states
+        '''
         for index, (current_state, action, reward, new_state, done) in enumerate(minibatch):
             if not done:
                 max_future_q = np.max(future_qs_list[index])
@@ -301,7 +312,6 @@ class DQNAgent:
 
         with self.graph.as_default():
             self.model.fit(np.array(X)/255, np.array(y), batch_size=TRAINING_BATCH_SIZE, verbose=0, shuffle=False, callbacks=[self.tensorboard] if log_this_step else None)
-
 
         if log_this_step:
             self.target_update_counter += 1
