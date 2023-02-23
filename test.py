@@ -15,8 +15,10 @@ import keras.backend.tensorflow_backend as backend
 from keras.models import load_model
 from sensor_data_script import CarEnv, MEMORY_FRACTION
 
+path = r"/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/models/Xception__-126796.42max_-143855.96avg_-162444.13min__1677136399.model"
 
-MODEL_PATH = 'models/Xception__-5937.03max_-6355.92avg_-6857.42min__1676771282.model'
+#MODEL_PATH = 'models/Xception__-5937.03max_-6355.92avg_-6857.42min__1676771282.model'
+MODEL_PATH = path
 
 if __name__ == '__main__':
 
