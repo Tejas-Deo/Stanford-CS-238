@@ -206,6 +206,7 @@ class CarEnv:
     
     def lanecrossing_data(self, event):
         self.lanecrossing_history.append(event)
+        print("Lane crossing history: ", event)
 
 
 
@@ -233,10 +234,16 @@ class CarEnv:
         if action == 0:
             self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=0))
         if action == 1:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1*self.STEER_AMT))
+            #self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-0.5*self.STEER_AMT))
         if action == 2:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1*self.STEER_AMT))
+            #self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=0.5*self.STEER_AMT))
             
+        
+        # initialize a reward for a single action 
+        reward = 0
+
         # to calculate the kmh of the vehicle
         v = self.vehicle.get_velocity()
         kmh = int(3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
@@ -251,29 +258,33 @@ class CarEnv:
         '''
         if len(self.collision_hist) != 0:
             done = True
-            reward = -1
+            reward = reward - dist_from_goal
         
         # to keep a constant speed
-        if kmh < 50:
+        if kmh < 35:
             done = False
-            reward = -30
+            reward = reward - 30
 
         # to force the vehicle to approach the final destination
         if dist_from_goal >= 5:
             done = False
-            reward = -dist_from_goal
+            reward = reward - dist_from_goal
         if dist_from_goal < 5:
             done = True
-            rewrad = 120      # because the diff btw initial and final destination is roughly equal to 125. 
+            reward = reward + 100000000      # because the diff btw initial and final destination is roughly equal to 125. 
 
         # to force the car to keep it's lane
         if len(self.lanecrossing_history) != 0:
             done = False
-            reward = -dist_from_goal
+            reward = reward - dist_from_goal
         
         # to run each episode for just 20 secodns
         if self.episode_start + 20 < time.time():
             done = True
+
+        # to add a positive reinforcement
+        if len(self.lanecrossing_history) == 0 and int(dist_from_goal%25):
+            reward = reward + 100000*int(dist_from_goal%25)
             
         #reward +=-np.sqrt((pos.x+106.1)**2 +(pos.y-10.963)**2)
         return self.front_camera, reward, done, None
@@ -329,10 +340,12 @@ class DQNAgent:
         # transition = (current_state, action, reward, new_state, done)
         self.replay_memory.append(transition)
 
+
     def train(self):
         if len(self.replay_memory) < MIN_REPLAY_MEMORY_SIZE:
             return
 
+        # to sample a minibatch
         minibatch = random.sample(self.replay_memory, MINIBATCH_SIZE)
 
         # to normalize the image
@@ -367,6 +380,7 @@ class DQNAgent:
             log_this_step = True
             self.last_log_episode = self.tensorboard.step
 
+        # to contnuously train the base model 
         with self.graph.as_default():
             self.model.fit(np.array(X)/255, np.array(y), batch_size=TRAINING_BATCH_SIZE, verbose=0, shuffle=False, callbacks=[self.tensorboard] if log_this_step else None)
 
@@ -374,10 +388,12 @@ class DQNAgent:
         if log_this_step:
             self.target_update_counter += 1
 
+        # to assign the weights of the base model to the target model 
         if self.target_update_counter > UPDATE_TARGET_EVERY:
             self.target_model.set_weights(self.model.get_weights())
             self.target_update_counter = 0
 
+    
     def get_qs(self, state):
         return self.model.predict(np.array(state).reshape(-1, *state.shape)/255)[0]
 
