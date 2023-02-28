@@ -1,3 +1,3 @@
 # Stanford-CS-238
 
-Using Sentdex tutorial to upload the code
+Took reference from Sentdex tutorial
