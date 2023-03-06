@@ -334,8 +334,9 @@ class CarEnv:
         dist_from_goal = np.sqrt((pos.x - final_destination[0])**2 + (pos.y-final_destination[1])**2)
         dist_from_ini = np.sqrt((final_destination[0] - initial_pos[0])**2 + (final_destination[1]-initial_pos[1])**2)
         
-        
         done = False
+
+        
         '''
         TO DEFINE THE REWARDS
         '''
@@ -613,6 +614,7 @@ if __name__ == '__main__':
     if not os.path.isdir(path):
         os.makedirs(path)
 
+    
     # Create agent and environment
     agent = DQNAgent()
     env = CarEnv()
