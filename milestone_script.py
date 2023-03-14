@@ -4,6 +4,10 @@ import glob
 import os
 import sys
 
+import faulthandler
+
+faulthandler.enable()
+
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
@@ -137,6 +141,8 @@ class CarEnv:
     im_height = IM_HEIGHT
     front_camera = None
 
+    print("CALLED CARENV")
+
 
     def __init__(self):
         # to initialize
@@ -150,10 +156,47 @@ class CarEnv:
         self.crossing = 0
         self.curves = 1
         self.reached = 0
+        self.fov = 110
+        self.camera_spacing = 0.5
         self.waypoint = self.client.get_world().get_map().get_waypoint(Location(x=curves[self.curves][1][0], y=curves[self.curves][1][1], z=curves[self.curves][1][2]), project_to_road=True)
         self.final_destination  = [170, 306.886, 5]
         self.distances = [None]
+        self.edge_detection_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/edge_detection/"
+        self.depth_map_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/depth_map/"
+        self.depth_array1_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/depth_array1/"
+        self.disparity_image_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/disparity_image/"
+        self.new_depth_map_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/new_depth_map/"
+        self.seg_images_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/segmented_images/"
+        self.modified_seg_images_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/modified_segmented_images/"
+        self.seg_cropped_images_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/segmented_cropped_images/"
+        self.disparity_cropped_images_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/disparity_cropped_image/"
+        self.depth_cropped_images_path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/depth_cropped_image/"
+
         
+        
+        # Build the K projection matrix:
+        # K = [[Fx,  0, image_w/2],
+        #      [ 0, Fy, image_h/2],
+        #      [ 0,  0,         1]]
+        
+        
+        
+        # self.image_w = IM_WIDTH
+        # self.image_h = IM_HEIGHT
+        # self.focal = self.image_w / (2.0 * np.tan(self.fov * np.pi / 360.0))
+
+        # # In this case Fx and Fy are the same since the pixel aspect ratio is 1
+        # self.K = np.identity(3)
+        # self.K[0, 0] = self.K[1, 1] = self.focal
+        # self.K[0, 2] = self.image_w / 2.0
+        # self.K[1, 2] = self.image_h / 2.0
+        # print(f'K matrix: {self.K}')
+
+
+
+
+
+
 
     def reset(self):
         # store any collision detected
@@ -163,47 +206,121 @@ class CarEnv:
         # store the number of times the vehicles crosses the lane marking
         self.lanecrossing_history = []
         
-        initial_pos = curves[self.curves][1]
-        self.transform = Transform(Location(x=initial_pos[0], y=initial_pos[1], z=initial_pos[2]), Rotation(yaw=initial_pos[3]))
-        # to spawn the actor; the veichle
-        self.vehicle = self.world.spawn_actor(self.model_3, self.transform)
+
+        '''
+        To spawn the fornt car
+        '''
+        self.front_car_transform = carla.Transform(carla.Location(x=90, y=306.886, z=5))
+        self.front_vehicle = self.world.spawn_actor(self.model_3, self.front_car_transform)
+        self.actor_list.append(self.front_vehicle)
+        print("Spawned front vehicle.....")
+
+        '''
+        To spawn my car
+        '''
+        self.vehicle_transform = carla.Transform(carla.Location(x=80, y=306.886, z=5))
+        self.vehicle = self.world.spawn_actor(self.model_3, self.vehicle_transform)
         self.actor_list.append(self.vehicle)
-        
-        print("Spawning my agent.....")
+        print("Spawned my vehicle.....")
 
-        # to use the RGB camera
-        self.depth_camera = self.blueprint_library.find("sensor.camera.depth")
+        # to create a spawn point for other sensors
+        self.sensor_spawn_point = carla.Transform(carla.Location(x = 1.5, z = 2.4), Rotation(yaw = 0))
+
+
+
+        '''
+        To spawn the DEPTH cameras
+        '''
+
+        # to spawm the LEFT RGB Depth camera
+        self.left_depth_camera = self.blueprint_library.find("sensor.camera.depth")
         #self.depth_camera.set_attribute('image_type', 'Depth')
-        self.depth_camera.set_attribute("image_size_x", f"{IM_WIDTH}")
-        self.depth_camera.set_attribute("image_size_y", f"{IM_HEIGHT}")
-        self.depth_camera.set_attribute("fov", f"110")
+        self.left_depth_camera.set_attribute("image_size_x", f"{IM_WIDTH}")
+        self.left_depth_camera.set_attribute("image_size_y", f"{IM_HEIGHT}")
+        self.left_depth_camera.set_attribute("fov", f"110")
 
-        self.camera_spawn_point = carla.Transform(carla.Location(x=1.5, z=2.4), Rotation(yaw=0))
-
+        # location
+        self.left_camera_spawn_point = carla.Transform(carla.Location(x=2, y =-0.5*self.camera_spacing, z=2.4), Rotation(yaw=0))
+        
         # to spawn the camera
-        self.camera_sensor = self.world.spawn_actor(self.depth_camera, self.camera_spawn_point, attach_to = self.vehicle)
-        self.actor_list.append(self.camera_sensor)
-
-        #cc = carla.ColorConverter.Depth
+        self.left_camera_sensor = self.world.spawn_actor(self.left_depth_camera, self.left_camera_spawn_point, attach_to = self.vehicle)
+        self.actor_list.append(self.left_camera_sensor)
+        #print("Sending LEFT camera image for processing....")
 
         # to record the data from the camera sensor
-        self.camera_sensor.listen(lambda data: self.distance_from_front_car(data))
+        _ = self.left_camera_sensor.listen(lambda data: self.process_image(data, True, False, False))
+        #print('In RESET FUNCTION after processing LEFT IMAGE')
+        #print() 
         #self.camera_sensor.listen(lambda image: self.process_image(image.convert(ColorConverter.LogarithmicDepth)))
         
 
-        # to initialize the car quickly and get it going
+
+        # TO spawn the RIGHT RGB Depth camera
+        self.right_depth_camera = self.blueprint_library.find("sensor.camera.depth")
+        #self.depth_camera.set_attribute('image_type', 'Depth')
+        self.right_depth_camera.set_attribute("image_size_x", f"{IM_WIDTH}")
+        self.right_depth_camera.set_attribute("image_size_y", f"{IM_HEIGHT}")
+        self.right_depth_camera.set_attribute("fov", f"110")
+
+        self.right_camera_spawn_point = carla.Transform(carla.Location(x=2, y = 0.5*self.camera_spacing, z=2.4), Rotation(yaw=0))
+        
+        # to spawn the camera
+        self.right_camera_sensor = self.world.spawn_actor(self.right_depth_camera, self.right_camera_spawn_point, attach_to = self.vehicle)
+
+        #print("Sending RIGHT camera image for processing......")
+        _ = self.right_camera_sensor.listen(lambda data: self.process_image(data, False, True, False))
+        #print('In RESET FUNCTION after processing RIGHT IMAGE')
+        #print()
+        #self.camera_sensor.listen(lambda image: self.process_image(image.convert(ColorConverter.LogarithmicDepth)))
+
+
+
+
+        '''
+        To spawn the SEGMENTATION camera
+        '''
+        self.seg_camera = self.blueprint_library.find("sensor.camera.semantic_segmentation")
+        self.seg_camera.set_attribute("image_size_x", f"{IM_WIDTH}")
+        self.seg_camera.set_attribute("image_size_y", f"{IM_HEIGHT}")
+        self.seg_camera.set_attribute("fov", f"110")
+
+        # to spawn the segmentation camera exactly in between the 2 depth cameras
+        self.seg_camera_spawn_point = carla.Transform(carla.Location(x=2, y = 0, z=2.4), Rotation(yaw=0))
+        
+        # to spawn the camera
+        self.seg_camera_sensor = self.world.spawn_actor(self.seg_camera, self.seg_camera_spawn_point, attach_to = self.vehicle)
+        #print("Segmentation camera image sent for processing....")
+        self.actor_list.append(self.seg_camera_sensor)
+
+        self.seg_camera_sensor.listen(lambda data: self.process_image(data, False, False, True))
+        #print("In RESET FUNCTION after processing SEGMENTATION IMAGE")
+        #print()
+
+        print("Spawned the cameras.....")
+
+        print("Sleeping....")
+        time.sleep(3)
+
+
+
+
+        
+        
+        '''
+        To initialize the vehicle quickly
+        '''
         self.vehicle.apply_control(carla.VehicleControl(throttle = 0.0, brake = 0.0))
-        time.sleep(4)
-
-        #self.front_vehicle.apply_conrol(carla.VehicleControl(throttle = 0.0, brake = 0.0))
-        #time.sleep(4)
+        time.sleep(3)
 
 
+        '''
+        To use the collision and the lane crossing sensors
+        '''
         # to introduce the collision sensor to detect what type of collision is happening
         col_sensor = self.blueprint_library.find("sensor.other.collision")
         
         # keeping the location of the sensor to be same as that of the RGB camera
-        self.collision_sensor = self.world.spawn_actor(col_sensor, self.camera_spawn_point, attach_to = self.vehicle)
+        self.collision_sensor = self.world.spawn_actor(col_sensor, self.sensor_spawn_point, attach_to = self.vehicle)
         self.actor_list.append(self.collision_sensor)
 
         # to record the data from the collision sensor
@@ -214,21 +331,24 @@ class CarEnv:
         lane_crossing_sensor = self.blueprint_library.find("sensor.other.lane_invasion")
 
         # keeping the location of the sensor to be same as that of RGM Camera
-        self.lanecrossing_sensor = self.world.spawn_actor(lane_crossing_sensor, self.camera_spawn_point, attach_to = self.vehicle)
+        self.lanecrossing_sensor = self.world.spawn_actor(lane_crossing_sensor, self.sensor_spawn_point, attach_to = self.vehicle)
         self.actor_list.append(self.lanecrossing_sensor)
 
         # to record the data from the lanecrossing_sensor
         self.lanecrossing_sensor.listen(lambda event: self.lanecrossing_data(event))
 
 
-        while self.front_camera is None:
-            time.sleep(0.01)
+        # while self.front_camera is None:
+        #     time.sleep(0.01)
 
 
         # going to keep an episode length of 10 seconds otherwise the car learns to go around a circle and keeps doing the same thing
         self.episode_start = time.time()
 
         self.vehicle.apply_control(carla.VehicleControl(throttle = 1.0, brake = 0.0))
+
+        #print('Exiting from reset....')
+        #sys.exit()
 
         return [0]
 
@@ -240,83 +360,352 @@ class CarEnv:
     
     def lanecrossing_data(self, event):
         self.lanecrossing_history.append(event)
-        print("Lane crossing history: ", event)
+        #print("Lane crossing history: ", event)
 
     def distance_from_front_car(self, image):
         self.distances.append(self.process_image(image))
 
 
 
-    def process_image(self, image):        
+    def process_image(self, image, is_left_camera, is_right_camera, seg_camera):        
         
         # Convert depth image to array of depth values
-        depth_array1 = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-        depth_array1 = np.reshape(depth_array1, (image.height, image.width, 4))
-        depth_array1 = depth_array1.astype(np.int32)
-        
-        # Using this formula to get the distances
-        depth_map = (depth_array1[:, :, 0]*255*255 + depth_array1[:, :, 1]*255 + depth_array1[:, :, 2])/1000
-        
-        # Making the sky at 0 distance
-        x = np.where(depth_map >= 16646.655)
-        depth_map[x] = 0
+        image_array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
+        image_array = np.reshape(image_array, (image.height, image.width, 4))
+        #image_array = image_array.astype(np.int32)
+        #image_array = np.array(image_array)
 
-        # Showing the initial depth image
-        cv2.imshow("Initial: ", np.array(depth_array1, dtype = np.uint8))
+        # print("IS LEFT CAMERA: ", is_left_camera)
+        # print("IS RIGHT CAMERA: ", is_right_camera)
+        # print("SEGMENTATION CAMERA: ", seg_camera)
 
+        # if is_left_camera == True:
+        #     print("Wallah")
+        #     sys.exit()
+        
 
-        depth_image = image.convert(carla.ColorConverter.Depth)
-        
-        # Convert depth image to array of depth values
-        depth_array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-        depth_array = depth_array.reshape((image.height, image.width, 4))
-        depth_array = depth_array[:, :, 0]
-        
-        # Apply to Gaussian Blurs
-        depth_array = cv2.GaussianBlur(depth_array, (5, 5), 0)
-        #depth_array = cv2.GaussianBlur(depth_array, (5, 5), 0)
-
-        
-        # Find the contour of the car in the depth map using Canny edge detection
-        
-        edge_detected_image = cv2.Canny(depth_array.astype(np.uint8), 0, 25)
-        cv2.imshow("Edge Detection", np.array(edge_detected_image, dtype = np.uint8))
-        cv2.waitKey(0)
-        
-        if cv2.waitKey(1) == ord('q'):
-            cv2.destroyAllWindows()
+        if is_left_camera == True:
+            #print("Got depth image from LEFT CAMERA")
+            image_array = image_array[:, :, 0]
+            self.depth_array_left = image_array
+            return None
+            #print("Got image from left camera.....")
+            # cv2.imshow("Left Camera Image: ", np.array(self.depth_array_left, dtype=np.dtype("uint8")))
+            # cv2.waitKey(0)
 
 
-        contours, _ = cv2.findContours(edge_detected_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        if is_right_camera == True:
+            #print("Got depth image from RIGHT CAMERA")
+            image_array = image_array[:, :, 0]
+            self.depth_array_right = image_array
+            #print("Got image from right camera.....")
+            # cv2.imshow("Right Camera Image: ", np.array(self.depth_array_right, dtype=np.dtype("uint8")))
+            # cv2.waitKey(0)
+            return None
         
-        # Calculate the distance between your car and the car in front of you
-        if contours:
-            print("Detected countours....")
-            # Find the contour with the largest area (assuming it is the car in front of you)
-            contour = sorted(contours, key=cv2.contourArea)
-            cx = 0
-            cy = 0
-            i = 1
-            # look at contours with centers between x = 100 and x = 500 and above y = 250
-            # This is the area where the car might be
-            while cx<100 or cx>500 or cy<250:
-                car_contour = contour[-i]
-                # Calculate the center of mass of the contour
-                M = cv2.moments(car_contour)
-                if M["m00"] != 0:
-                    cx = int(M['m10'] / M['m00'])
-                    cy = int(M['m01'] / M['m00'])
-                else:
-                    break
-                i += 1
-                print(cx,cy)
+
+        if seg_camera == True:
+            
+            self.vehicle_indices = []
+            
+            #print("Got SEGMENTATION IMAGE")
+            # removing the alpha channel
+            image_array = image_array[:, :, :3]
+            self.seg_array = image_array
+            seg_image_copy = np.copy(self.seg_array)
+            #seg_image_copy = self.seg_array.copy()  
+
+            #cv2.imwrite(self.seg_images_path + "." + str(time.time()) + ".png", seg_image_copy)
+
+
+                    # Define color codes for each class
+            colors = {
+                0: [0, 0, 0],         # None
+                1: [70, 70, 70],      # Buildings
+                2: [190, 153, 153],   # Fences
+                3: [72, 0, 90],       # Other
+                4: [220, 20, 60],     # Pedestrians
+                5: [153, 153, 153],   # Poles
+                6: [157, 234, 50],    # RoadLines
+                7: [128, 64, 128],    # Roads
+                8: [244, 35, 232],    # Sidewalks
+                9: [107, 142, 35],    # Vegetation
+                10: [0, 0, 255],      # Vehicles
+                11: [102, 102, 156],  # Walls
+                12: [220, 220, 0],    # TrafficSigns
+            }
+
+            #self.seg_array.setflags(write=1)
+            for key in colors:
+                #print("Key: ", key)
+                #print(np.where((self.seg_array == [0, 0, key]).all(axis = 2)))
+
+                #copy_seg_img = np.copy(self.seg_array)
+                seg_image_copy[np.where((seg_image_copy == [0, 0, key]).all(axis = 2))] = colors[key]
+
+                # to store the vehicle indices only
+                if key == 10:
+                    self.vehicle_indices.append(np.where((self.seg_array == [0, 0, key]).all(axis = 2)))
+                    #print("Vehicle indices: ", self.vehicle_indices)
+                    #print(np.where((self.seg_array == [0, 0, 10]).all(axis = 2)))
+                    #print("Shape: ", self.vehicle_indices.shape)
+                    # print("Length of vehicle indices: ", len(self.vehicle_indices[0]))
+                    # print("Length of X values: ", len(self.vehicle_indices[0][0]))
+                    # print("Length of Y values: ", len(self.vehicle_indices[0][1]))
+                
+
+
+
+            # saving the modified image
+            print("Stored the modified image....")
+            cv2.imwrite(self.modified_seg_images_path + "." + str(time.time()) + ".png", seg_image_copy)
+
+            #return None
+
+
+
+        if self.depth_array_left is not None and self.depth_array_right is not None and self.seg_array is not None:
+            print("Received all 3....")
+
+            # compute the disparity between images
+            stereo = cv2.StereoBM_create(numDisparities=160, blockSize=5)
+            disparity = stereo.compute(self.depth_array_left, self.depth_array_right, cv2.CV_32F)
+
+            #print("Shape of disparity image: ", disparity.shape)
+
+            print("Stored the disparity image.....")
+            cv2.imwrite(self.disparity_image_path + "." + str(time.time()) + ".png", disparity)
+
+            # cv2.imshow("Disparity image", np.array(disparity, dtype=np.dtype("uint8")))
+            # cv2.waitKey(0)
+
+
+            # compute the distance to objects using stereo vision
+            f = image.width / (2.0 * np.tan(np.radians(self.fov / 2.0)))
+            b = self.camera_spacing
+            depth = f * b / (disparity + 0.000000000000000000000000001)
+
+
+            # Plot the distance map
+            fig, ax = plt.subplots()
+            cmap = plt.cm.jet
+            cmap.set_bad(color='black')
+            im = ax.imshow(depth, cmap=cmap, vmin=0, vmax = np.max(depth))
+            ax.set_title('Distance Map')
+            ax.set_xlabel('Pixel X')
+            ax.set_ylabel('Pixel Y')
+            cbar = ax.figure.colorbar(im, ax=ax)
+            cbar.ax.set_ylabel('Distance (m)', rotation=-90, va="bottom")
+            plt.show()
+
+
+
+            print('Initial distance before cropping: ', depth[240, 320])
+
+            #cv2.imwrite(self.new_depth_map_path + "." + str(time.time()) + ".png", depth)
+
+            # # to get the distane to the object directly in front of the car
+            # mid_x = int(image.width / 2)
+            # mid_y = int(image.height / 2)
+            # distance = depth[mid_y, mid_x]
+
+            # to get the coordinates of the car in the segmentation image
+            if len(self.vehicle_indices[0][0]) == 0 :
+                print("Empty")
+            else:
+                print("Not empty:")
+                
+                x_cord = self.vehicle_indices[0][0]
+                y_cord = self.vehicle_indices[0][1]
+
+                x_min = min(x_cord)
+                x_max = max(x_cord)
+
+                y_min = min(y_cord)
+                y_max = max(y_cord)
+
+                # mid_x_new = int((x_min + x_max)/2)
+                # mid_y_new = int((y_min + y_max) / 2)
+                
+                # to crop the segmented image
+                seg_cropped_image = seg_image_copy[x_min:x_max, y_min:y_max]
+                cv2.imwrite(self.seg_cropped_images_path + "." + str(time.time()) + ".png", seg_cropped_image)
+                print("Saved the segmented cropped image....")
+
+                # to crop the diparity image
+                disparity_cropped_image = disparity[x_min:x_max, y_min:y_max]
+                cv2.imwrite(self.disparity_cropped_images_path + "." + str(time.time()) + ".png", disparity_cropped_image)
+                print("Saved disparity cropped image....")
+
+                # to crop the depth image
+                depth_cropped_image = depth[x_min:x_max, y_min:y_max]
+                cv2.imwrite(self.depth_cropped_images_path + "." + str(time.time()) + ".png", depth_cropped_image)
+                print("Saved depth cropped image.....")
+
+                print("Shape of the depth cropped image: ", depth_cropped_image.shape)
+
+                height, width = depth_cropped_image.shape
+                
+                
+                mid_x = int(height / 2)
+                mid_y = int(width / 2)
+
+                mid_x_list = []
+                mid_y_list = []
+
+                # for i in range(mid_x - 10, mid_x + 10):
+                #     mid_x_list.append(i)
+                
+                # for i in range(mid_y - 50, mid_y + 50):
+                #     mid_y_list.append(i)
+                
+                
+                # total_value = 0
+                # distance_values = []
+                # for x in mid_x_list:
+                #     for y in mid_y_list:
+                #         value = depth_cropped_image[x,y]
+                #         distance_values.append(value)
+                #         #total_value = total_value + value
+
+                distance = depth_cropped_image[mid_x, mid_y]
+                #distance = total_value/100
+                #distance = max(distance_values)
+
+                print("Distance from the front car is: ", distance)
+
+            
+            print("Exiting the system....")
+            sys.exit()
+
+            #print("Distance from the front object is: ", distance)
+
+            #time.sleep(0.5)
+
+            #print("Exiting from the system.....")
+
+
+
             
             
-            # Calculate distance from camera to each point in world coordinates
-            distances = depth_map
+            # left_matcher_SGBM = cv2.StereoSGBM_create(minDisparity=min_disparity,
+            #                                       numDisparities=num_disparities,
+            #                                       blockSize=block_size,
+            #                                       P1=8 * 3 * window_size ** 2,
+            #                                       P2=32 * 3 * window_size ** 2,
+            #                                       mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY)
             
-            # Print the distance to the car
-            print(distances[int(cy),int(cx)])
+            
+            # disp_left = left_matcher_SGBM.compute(self.depth_array_left, self.depth_array_right).astype(np.float32)/16
+
+            # print("Shape of disparity image: ", disp_left.shape)
+
+            # f = self.K[0,0]
+            # b = 0.4
+            
+            # # Replace all instances of 0 and -1 disparity with a small minimum value (to avoid div by 0 or negatives)
+            # disp_left[disp_left == 0] = 0.1
+            # disp_left[disp_left == -1] = 0.1
+            # depth_map = np.ones(disp_left.shape, np.single)
+            # depth_map[:] = f * b / disp_left[:]
+
+            # print("shape of depth map: ", depth_map.shape)
+            
+            
+            # # cv2.imshow("Dpeth map", np.array(depth_map, dtype = np.uint8))
+            # # cv2.waitKey(0)
+
+            # # if cv2.waitKey(1) == ord('q'):
+            # #     cv2.destroyAllWindows()
+            
+            # # to get the distane to the object directly in front of the car
+            # mid_x = int(image.width / 2)
+            # mid_y = int(image.height / 2)
+            # distance = depth_map[mid_y, mid_x]
+
+            # print("Distance to the front car is: ", distance)
+
+
+            #print('Exiting....')
+            #sys.exit()
+
+            #self.distances.append(distance) 
+
+
+
+
+
+        # print('Exiting the system.....')    
+        # sys.exit()
+        
+        # # Using this formula to get the distances
+        # depth_map = (depth_array1[:, :, 0]*255*255 + depth_array1[:, :, 1]*255 + depth_array1[:, :, 2])/1000
+        # name = self.depth_map_path + "+" "{}".format(time.time()) + ".png"
+        # cv2.imwrite(name, depth_map)
+        
+        # # Making the sky at 0 distance
+        # x = np.where(depth_map >= 16646.655)
+        # depth_map[x] = 0
+
+        # # Showing the initial depth image
+        # #cv2.imshow("Initial: ", np.array(depth_array1, dtype = np.uint8))
+        # #cv2.imwrite(depth_array1, self.depth_array1_path + "." + str(time.time()))
+
+
+        # depth_image = image.convert(carla.ColorConverter.Depth)
+        
+        # # Convert depth image to array of depth values
+        # depth_array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
+        # depth_array = depth_array.reshape((image.height, image.width, 4))
+        # depth_array = depth_array[:, :, 0]
+        
+        # # Apply to Gaussian Blurs
+        # depth_array = cv2.GaussianBlur(depth_array, (5, 5), 0)
+        # #depth_array = cv2.GaussianBlur(depth_array, (5, 5), 0)
+
+        
+        # # Find the contour of the car in the depth map using Canny edge detection
+        
+        # edge_detected_image = cv2.Canny(depth_array.astype(np.uint8), 0, 25)
+        # name = self.edge_detection_path + "+" "{}".format(time.time()) + ".png"
+        # cv2.imwrite(name, edge_detected_image)
+        # #cv2.imshow("Edge Detection", np.array(edge_detected_image, dtype = np.uint8))
+        # #cv2.waitKey(0)
+        
+        # #if cv2.waitKey(1) == ord('q'):
+        #     #cv2.destroyAllWindows()
+
+
+        # contours, _ = cv2.findContours(edge_detected_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # # Calculate the distance between your car and the car in front of you
+        # if contours:
+        #     print("Detected countours....")
+        #     # Find the contour with the largest area (assuming it is the car in front of you)
+        #     contour = sorted(contours, key=cv2.contourArea)
+        #     cx = 0
+        #     cy = 0
+        #     i = 1
+        #     # look at contours with centers between x = 100 and x = 500 and above y = 250
+        #     # This is the area where the car might be
+        #     while cx<100 or cx>500 or cy<250:
+        #         car_contour = contour[-i]
+        #         # Calculate the center of mass of the contour
+        #         M = cv2.moments(car_contour)
+        #         if M["m00"] != 0:
+        #             cx = int(M['m10'] / M['m00'])
+        #             cy = int(M['m01'] / M['m00'])
+        #         else:
+        #             break
+        #         i += 1
+        #         print(cx,cy)
+            
+            
+        #     # Calculate distance from camera to each point in world coordinates
+        #     distances = depth_map
+            
+        #     # Print the distance to the car
+        #     print("Distance ", distances[int(cy),int(cx)])
 
             # sending these distances values values to take 
 
@@ -333,14 +722,14 @@ class CarEnv:
             # plt.show()
             
 
-            return distances(int(cy), int(cx))
+            #return distance
             
 
         
-        else:
-            print("No car detected and so destroying all actors....")
-            for actor in env.actor_list:
-                actor.destroy()
+        # else:
+        #     print("No car detected and so destroying all actors....")
+        #     for actor in env.actor_list:
+        #         actor.destroy()
         
 
 
@@ -351,38 +740,45 @@ class CarEnv:
         0, 1, 2
         '''
 
+        print("action received: ", action)
+
+
         if action == 0:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.8, steer=0*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=0*self.STEER_AMT))
             action_throttle = 0.8
             action_steer = 0
             action_break = 0
         if action == 1:
             #self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1*self.STEER_AMT))
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=-0.4*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=-0.4*self.STEER_AMT))
             action_throttle = 0.5
             action_steer = -0.3
             action_break = 0
         if action == 2:
             #self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1*self.STEER_AMT))
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=0.4*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=0.4*self.STEER_AMT))
             action_throttle = 0.5
             action_steer = 0.3
             action_break = 0
         if action == 3:
             #self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=-1*self.STEER_AMT))
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=-0.1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=-0.1*self.STEER_AMT))
             action_throttle = 0.5
             action_steer = -0.1
             action_break = 0
         if action == 4:
             #self.vehicle.apply_control(carla.VehicleControl(throttle=1.0, steer=1*self.STEER_AMT))
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.5, steer=0.1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=0.1*self.STEER_AMT))
             action_throttle = 0.5
             action_steer = 0.1
             action_break = 0
         if action == 5:
+            #pass
+            print("BRAKING")
             self.vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake = 1.0))
-            sleep(2)
+            #sleep(2)
+        
+        
         # initialize a reward for a single action 
         reward = 0
         # to calculate the kmh of the vehicle
@@ -404,6 +800,8 @@ class CarEnv:
         dist_from_goal = np.sqrt((pos.x - final_destination[0])**2 + (pos.y-final_destination[1])**2)
 
         done = False
+        
+        
         '''
         TO DEFINE THE REWARDS
         '''
@@ -470,7 +868,7 @@ class CarEnv:
         if self.episode_start + 200 < time.time():
             done = True
 
-        print(reward)
+        #print(reward)
 
         return [phi], reward, done, waypoint
             
@@ -505,6 +903,17 @@ class CarEnv:
         return w1
 
 
+
+
+
+env = CarEnv()
+env.reset()
+
+
+
+
+
+'''
 class DQNAgent:
     def __init__(self):
         self.model = load_model(MODEL_PATH)
@@ -549,7 +958,7 @@ class DQNAgent:
         # to sample a minibatch
         minibatch = random.sample(self.replay_memory, MINIBATCH_SIZE)
 
-        # to normalize the image
+        
         current_data = np.array([[transition[0][i] for i in range(1)] for transition in minibatch])
         # predicting all the datapoints present in the mini-batch
         with self.graph.as_default():
@@ -762,3 +1171,4 @@ if __name__ == '__main__':
     agent.model.save(f'models/{MODEL_NAME}__{max_reward:_>7.2f}max_{average_reward:_>7.2f}avg_{min_reward:_>7.2f}min__{int(time.time())}.model')
 
 
+'''
