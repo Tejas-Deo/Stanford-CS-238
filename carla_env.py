@@ -54,7 +54,6 @@ import tensorflow as tf
 import keras.backend.tensorflow_backend as backend
 from threading import Thread
 from tensorflow.keras import regularizers
-import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
@@ -109,10 +108,7 @@ class CarEnv:
         self.distance = 0
         self.cam = None
         self.seg = None
-
-        self.pedestrain_seg_images = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/pedestrian_segmented_images/"
-
-
+        
     def reset(self):
         # store any collision detected
         self.collision_history = []
@@ -128,16 +124,12 @@ class CarEnv:
         
         print("Spawning my agent.....")
 
-        '''
-        To spawn the depth cameras
-        '''
-
-        # to use the Depth camera
+        # to use the RGB camera
         self.depth_camera = self.blueprint_library.find("sensor.camera.depth")
         #self.depth_camera.set_attribute('image_type', 'Depth')
         self.depth_camera.set_attribute("image_size_x", f"{IM_WIDTH}")
         self.depth_camera.set_attribute("image_size_y", f"{IM_HEIGHT}")
-        self.depth_camera.set_attribute("fov", f"30")
+        self.depth_camera.set_attribute("fov", f"90")
 
         self.camera_spawn_point = carla.Transform(carla.Location(x=2, y = 0, z=2.4), Rotation(yaw=0))
 
@@ -148,15 +140,13 @@ class CarEnv:
         # to record the data from the camera sensor
         self.camera_sensor.listen(lambda data: self.image_dep(data))
 
-
-
         '''
         To spawn the SEGMENTATION camera
         '''
         self.seg_camera = self.blueprint_library.find("sensor.camera.semantic_segmentation")
         self.seg_camera.set_attribute("image_size_x", f"{IM_WIDTH}")
         self.seg_camera.set_attribute("image_size_y", f"{IM_HEIGHT}")
-        self.seg_camera.set_attribute("fov", f"30")
+        self.seg_camera.set_attribute("fov", f"90")
 
         # to spawn the segmentation camera exactly in between the 2 depth cameras
         self.seg_camera_spawn_point = carla.Transform(carla.Location(x=2, y = 0, z=2.4), Rotation(yaw=0))
@@ -205,7 +195,7 @@ class CarEnv:
 
         self.vehicle.apply_control(carla.VehicleControl(throttle = 1.0, brake = 0.0))
 
-        return [(self.distance-300)/300, -1, 0, 0]
+        return [(self.distance-300)/300, -1, 0]
 
 
     def collision_data(self, event):
@@ -254,7 +244,6 @@ class CarEnv:
         #cbar = ax.figure.colorbar(im, ax=ax)
         #cbar.ax.set_ylabel('Distance (m)', rotation=-90, va="bottom")
         #plt.savefig("pics/"+str(int(time.time()*100))+".jpg")
-
         
         image_array = np.frombuffer(self.seg.raw_data, dtype=np.dtype("uint8"))
         image_array = np.reshape(image_array, (self.seg.height, self.seg.width, 4))
@@ -280,73 +269,20 @@ class CarEnv:
         }
         
         # to store the vehicle indices only
-        #lane = np.where((self.seg_array == [0, 0, 6]).all(axis = 2))
+        self.vehicle_indices = np.where((self.seg_array == [0, 0, 10]).all(axis = 2))
+
         
         copy_seg_img = np.copy(self.seg_array)
-
-        copy2_seg_img = np.copy(self.seg_array)
-
         for key in colors:
-           copy2_seg_img[np.where((copy2_seg_img == [0, 0, key]).all(axis=2))] = colors[key]
-        
-        cv2.imwrite(self.pedestrain_seg_images + "." + str(time.time()) + ".png", copy2_seg_img)
+            copy_seg_img[np.where((copy_seg_img == [0, 0, key]).all(axis = 2))] = colors[key]
 
-        #if len(lane[0]) != 0:
-        if False:
-            sidewalk = np.where((copy_seg_img == [0, 0, 8]).all(axis = 2))
-            p2 = np.polyfit(sidewalk[0], sidewalk[1], 1)
-            
-            # Fit a polynomial of degree 2
-            p = np.polyfit(lane[0], lane[1], 2)
-            
-            # Create a new set of x-values to plot the fitted curve
-            x_fit = np.linspace(0, 479, 480)
-            
-            # Evaluate the fitted polynomial at the new x-values
-            y_fit = np.polyval(p, x_fit)
-            
-            # Evaluate the fitted polynomial at the new x-values
-            y_fit2 = np.polyval(p2, x_fit)
-            
-            # Plot the data and the fitted curve
-            #plt.plot(x, y, 'o', label='data')
-            #plt.plot(x_fit, y_fit, '-', label='fit')
-            #plt.legend()
-            #plt.show()
-            
-            for i in range(480):
-                for j in range(640):
-                    if j < y_fit[i] or j > y_fit2[i]:
-                        copy_seg_img[i,j] = [0,0,0]
-                        distances[i,j] = 0
-
-        
-        # to store the vehicle indices only
-        self.vehicle_indices = np.where((copy_seg_img == [0, 0, 10]).all(axis = 2))
-        
-        # to store the pedestrian indices only
-        self.pedestrian_indices = np.where((copy_seg_img == [0, 0, 4]).all(axis = 2))
-
-        
-        #copy_seg_img2 = np.copy(copy_seg_img)
-        #for key in colors:
-            #copy_seg_img2[np.where((copy_seg_img2 == [0, 0, key]).all(axis = 2))] = colors[key]
-
-        #cv2.imwrite("pics/seg/seg_"+str(int(time.time()*100))+".jpg", copy_seg_img2)    
+        cv2.imwrite("pics/seg_"+str(int(time.time()*100))+".jpg", copy_seg_img)    
 
         if len(self.vehicle_indices[0]) != 0:
             dis = np.sum(distances[self.vehicle_indices])/len(self.vehicle_indices[0])
         else:
             dis = 10000
-            
-        if len(self.pedestrian_indices[0]) != 0:
-            dis_ped = np.sum(distances[self.pedestrian_indices])/len(self.pedestrian_indices[0])
-            print('Distance from pedestrain: ', dis_ped)
-        else:
-            dis_ped = 10000
-            
-            
-        self.distance = min(dis, dis_ped)
+        self.distance = dis
 
         return dis
         
@@ -357,24 +293,22 @@ class CarEnv:
         0, 1, 2
         '''
         if action == 0:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0, brake = 0.75))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0, brake = 1.0))
 
         if action == 1:
             self.vehicle.apply_control(carla.VehicleControl(throttle=0.8, steer=0*self.STEER_AMT))
 
         if action == 2:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=-0.4*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.6, steer=-0.4*self.STEER_AMT))
         
         if action == 3:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=0.4*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.6, steer=0.4*self.STEER_AMT))
         
         if action == 4:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=-0.1*self.STEER_AMT))
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.6, steer=-0.1*self.STEER_AMT))
         
         if action == 5:
-            self.vehicle.apply_control(carla.VehicleControl(throttle=0.4, steer=0.1*self.STEER_AMT))
-            
-  
+            self.vehicle.apply_control(carla.VehicleControl(throttle=0.6, steer=0.1*self.STEER_AMT))
 
         
         if action != 0:
@@ -393,15 +327,10 @@ class CarEnv:
         rot = self.vehicle.get_transform().rotation
         
         # to get the closest waypoint to the car
-        path = self.trajectory()
-        waypoint = path[0][0]
-        if len(path) != 1:
-            next_waypoint = path[1][0]
-        else:
-            next_waypoint = waypoint
+        waypoint = self.trajectory()[0][0]
         waypoint_loc = waypoint.transform.location
         waypoint_rot = waypoint.transform.rotation
-        next_waypoint_loc = next_waypoint.transform.location
+        
         
         dist_from_goal = np.sqrt((pos.x - self.final_destination[0])**2 + (pos.y-self.final_destination[1])**2)
 
@@ -412,16 +341,9 @@ class CarEnv:
         # to get the orientation difference between the car and the road "phi"
         orientation_diff = waypoint_rot.yaw - rot.yaw
         phi = orientation_diff%360 -360*(orientation_diff%360>180)
-        
-        
-        u = [waypoint_loc.x-next_waypoint_loc.x, waypoint_loc.y-next_waypoint_loc.y]
-        v = [pos.x-next_waypoint_loc.x, pos.y-next_waypoint_loc.y]
-        signed_dis = np.linalg.norm(v)*np.sin(np.cross(u,v)*np.arccos(np.dot(u,v)/(np.linalg.norm(u)*np.linalg.norm(v))))
-        print(signed_dis)
 
-        print((current_state[1]+current_state[0])*30+30)
+        print(current_state[1]*30+30)
         print(current_state[0]*300+300)
-        print(current_state[2])
         
         if (current_state[0]*300+300)< (((current_state[1]+current_state[0])*30+30)*10 + 10):
             if action == 0:
@@ -440,17 +362,16 @@ class CarEnv:
 
         
         if self.distance<100 and kmh == 0:
-            done = False
+            done = True
             reward = 200
             
         if self.distance<40 and kmh >5:
-            done = False
+            done = True
             reward = -200
 
         # to avoid collisions
         if len(self.collision_history) != 0:
             done = True
-            print("COLLISION DETECTED!!!!")
             reward = - 200
 
         
@@ -465,7 +386,7 @@ class CarEnv:
 
         print(reward)
 
-        return [(self.distance-300)/300, (kmh-30)/30-(self.distance-300)/300, phi, signed_dis], reward, done, waypoint
+        return [(self.distance-300)/300, (kmh-30)/30-(self.distance-300)/300, phi], reward, done, waypoint
             
     def trajectory(self, draw = False):
         amap = self.world.get_map()

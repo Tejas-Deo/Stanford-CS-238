@@ -42,7 +42,7 @@ from keras.models import Model
 from keras.callbacks import TensorBoard
 
 from keras.models import Sequential, Model, load_model
-from keras.layers import AveragePooling2D, Conv2D, Activation, Flatten, GlobalAveragePooling2D, Dense, Concatenate, Input
+from keras.layers import AveragePooling2D, Conv2D, Activation, Flatten, GlobalAveragePooling2D, Dense, Concatenate, Input, Dropout
 
 
 #from tensorboard import *
@@ -438,6 +438,11 @@ class DQNAgent:
         self.last_logged_episode = 0
         self.training_initialized = False
 
+        model_filepath = r'/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/model.png'
+
+        tf.keras.utils.plot_model(self.model, to_file = model_filepath, show_shapes=True)
+        print("Model architecture saved....")
+
     def create_model(self):
         # define the first model
         #model1 = Sequential()
@@ -480,18 +485,18 @@ class DQNAgent:
         # define the first model
         model1 = Sequential()
 
-        model1.add(Conv2D(16, (7, 7), input_shape=(IM_HEIGHT, IM_WIDTH,3), padding='same', activation='relu'))
+        model1.add(Conv2D(16, (7, 7), input_shape=(IM_HEIGHT, IM_WIDTH,3), padding='same', activation='relu'), kernel_regularizer=regularizers.l2(0.01))
         model1.add(AveragePooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='av0'))
 
-        model1.add(Conv2D(16, (5, 5), padding='same', activation='relu', name='conv1'))
+        model1.add(Conv2D(16, (5, 5), padding='same', activation='relu', name='conv1'), kernel_regularizer=regularizers.l2(0.01))
         model1.add(AveragePooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='av1'))
-
-        model1.add(Conv2D(16, (3, 3), padding='same', activation='relu', name='conv2'))
-        model1.add(AveragePooling2D(pool_size=(3, 3), strides=(2, 2), padding='same', name='av2'))
     
         model1.add(Flatten())
         model1.add(Dense(256, activation='relu', name='dense_flat'))
+        model1.add(Dropout(0.5))
         model1.add(Dense(10, activation='relu', name='dense_flat1'))
+        model1.add(Dropout(0.5))
+        model1.add()
         
         # define the second model
         model2 = Sequential()

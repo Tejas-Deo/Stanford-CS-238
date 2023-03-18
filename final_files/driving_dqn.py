@@ -91,8 +91,10 @@ curves = [0, town2]
 #81.97343444824219,133.95750427246094 (1)
 #107.036376953125,97.1230239868164 (3)
 
-MODEL_PATH = 'models/Xception__-518.00max_-766.40avg_-1097.00min__1677834457.model'
+#MODEL_PATH = 'models/Xception__-518.00max_-766.40avg_-1097.00min__1677834457.model'
 MODEL_PATH = "models/Driving___146.00max_-246.60avg_-638.00min__1678929215.model"
+
+
 
 # Own Tensorboard class
 class ModifiedTensorBoard(TensorBoard):
@@ -130,9 +132,13 @@ class ModifiedTensorBoard(TensorBoard):
         #with self.writer.as_default():
             for name, value in logs.items():
                 tf.summary.scalar(name, value, step=index)
+                print("Writing on the summary writer")
+                print()
                 self.step += 1
                 self.writer.flush()   
                 
+
+
 
 class CarEnv:
     SHOW_CAM = SHOW_PREVIEW
@@ -321,6 +327,7 @@ class CarEnv:
             action_throttle = 0.5
             action_steer = 0.1
             action_break = 0
+        
         # initialize a reward for a single action 
         reward = 0
         # to calculate the kmh of the vehicle
@@ -349,6 +356,8 @@ class CarEnv:
         dist_from_goal = np.sqrt((pos.x - final_destination[0])**2 + (pos.y-final_destination[1])**2)
 
         done = False
+
+
         '''
         TO DEFINE THE REWARDS
         '''
@@ -360,9 +369,11 @@ class CarEnv:
         u = [waypoint_loc.x-next_waypoint_loc.x, waypoint_loc.y-next_waypoint_loc.y]
         v = [pos.x-next_waypoint_loc.x, pos.y-next_waypoint_loc.y]
         signed_dis = np.linalg.norm(v)*np.sin(np.cross(u,v)*np.arccos(np.dot(u,v)/(np.linalg.norm(u)*np.linalg.norm(v))))
+
         print(signed_dis)
         current_state[1] = current_state[1]
-        print(current_state[0]) 
+        print(current_state[0])
+
         if abs(current_state[0])<5:
             if action == 0:
                 reward += 2
@@ -581,10 +592,12 @@ class DQNAgent:
         
         return combined_model
 
+
     
     def update_replay_memory(self, transition):
         # transition = (current_state, action, reward, new_state, done)
         self.replay_memory.append(transition)
+
 
 
     def train(self):
@@ -673,7 +686,7 @@ if __name__ == '__main__':
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=MEMORY_FRACTION)
     backend.set_session(tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)))
 
-    path = r"/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/models"
+    path = "/home/tejas/Documents/Stanford/CS 238/Final Project/Stanford-CS-238/Stanford-CS-238/Stanford-CS-238/models"
     
     # Create models folder
     if not os.path.isdir(path):
@@ -692,6 +705,7 @@ if __name__ == '__main__':
     # Initialize predictions - first prediction takes longer as of initialization that has to be done
     # It's better to do a first prediction then before we start iterating over episode steps
     agent.get_qs([0,0])
+
 
     # Iterate over episodes
     for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
@@ -783,11 +797,12 @@ if __name__ == '__main__':
     
             # Append episode reward to a list and log stats (every given number of episodes)
             ep_rewards.append(episode_reward)
+
             if not episode % AGGREGATE_STATS_EVERY or episode == 1:
                 average_reward = sum(ep_rewards[-AGGREGATE_STATS_EVERY:])/len(ep_rewards[-AGGREGATE_STATS_EVERY:])
                 min_reward = min(ep_rewards[-AGGREGATE_STATS_EVERY:])
                 max_reward = max(ep_rewards[-AGGREGATE_STATS_EVERY:])
-                #agent.tensorboard.update_stats(reward_avg=average_reward, reward_min=min_reward, reward_max=max_reward, epsilon=epsilon)
+                agent.tensorboard.update_stats(reward_avg=average_reward, reward_min=min_reward, reward_max=max_reward, epsilon=epsilon)
     
                 # Save model, but only when min reward is greater or equal a set value
                 if min_reward >= MIN_REWARD:

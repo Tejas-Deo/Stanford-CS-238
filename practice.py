@@ -1,16 +1,16 @@
-import numpy as np
-
-location = np.array(None)
+import time
 
 
-test = np.array([[], []])
+start_time = time.time()
+print("Start time: ", start_time)
 
-x = []
-print("length: ", )
+while True:
+    current_time = time.time()
 
-if test[0][0] is None:
-    print("hi")
-else:
-    print("Bye")
+    if current_time - start_time > 5:
+        print("Value of subtraction: ", current_time - start_time)
+        print("Exiting loop: ")
+        break
 
-#print(location)
+
+print("after while loop")
